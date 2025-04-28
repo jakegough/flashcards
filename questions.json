@@ -1,0 +1,24 @@
+[
+  {
+    "type": "open",
+    "question": "6 × 7 = ?",
+    "answer": "42",
+    "hint": "It's between 40 and 50.",
+    "time": 20
+  },
+  {
+    "type": "open",
+    "question": "9 × 8 = ?",
+    "answer": "72",
+    "hint": "70 + 2.",
+    "time": 20
+  },
+  {
+    "type": "multiple",
+    "question": "5 × 5 = ?",
+    "choices": ["20", "25", "30", "35"],
+    "answer": "25",
+    "hint": "Quarter century.",
+    "time": 20
+  }
+]

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Question and Answer App</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+    #question, #hint, #answer { margin: 20px; font-size: 1.5em; }
+    #timer { font-size: 2em; margin-top: 20px; color: red; }
+    button { font-size: 1em; padding: 10px 20px; margin: 10px; }
+  </style>
+</head>
+<body>
+  <h1 id="roleTitle">Loading...</h1>
+  <div id="question"></div>
+  <div id="choices"></div>
+  <div id="hint" style="display:none;"></div>
+  <div id="answer" style="display:none;"></div>
+  <div id="timer"></div>
+
+  <script>
+    const role = new URLSearchParams(window.location.search).get('role') || 'student';
+    const roleTitle = document.getElementById('roleTitle');
+
+    let questions = [];
+    let currentIndex = -1;
+    let timerInterval;
+    let timeLeft = 0;
+    let started = false;
+    let channel;
+
+    async function loadQuestions() {
+      const response = await fetch('questions.json');
+      const loaded = await response.json();
+      if (role === 'proctor') {
+        questions = shuffleArray(loaded);
+      }
+      setupChannel(loaded);
+      if (role === 'proctor') {
+        document.getElementById('question').textContent = 'Press ENTER to start the test.';
+      } else {
+        document.getElementById('question').textContent = 'Waiting for proctor to start...';
+      }
+    }
+
+    function setupChannel(allQuestions) {
+      channel = new BroadcastChannel('qa_app');
+      channel.onmessage = (event) => {
+        if (event.data.type === 'start') {
+          questions = event.data.questions;
+          started = true;
+          nextQuestion();
+        }
+        if (event.data.type === 'show') {
+          currentIndex = event.data.index;
+          showQuestion(event.data.time);
+        }
+        if (event.data.type === 'tick') {
+          updateTimer(event.data.timeLeft);
+        }
+      };
+    }
+
+    function showQuestion(timeOverride) {
+      clearInterval(timerInterval);
+      const q = questions[currentIndex];
+      document.getElementById('question').textContent = q.question;
+      
+      const choicesDiv = document.getElementById('choices');
+      choicesDiv.innerHTML = '';
+      if (q.type === 'multiple') {
+        q.choices.forEach(choice => {
+          const btn = document.createElement('button');
+          btn.textContent = choice;
+          choicesDiv.appendChild(btn);
+        });
+      }
+
+      if (role === 'proctor') {
+        document.getElementById('hint').style.display = 'block';
+        document.getElementById('hint').textContent = 'Hint: ' + q.hint;
+        document.getElementById('answer').style.display = 'block';
+        document.getElementById('answer').textContent = 'Answer: ' + q.answer;
+      } else {
+        document.getElementById('hint').style.display = 'none';
+        document.getElementById('answer').style.display = 'none';
+      }
+
+      if (timeOverride !== undefined) {
+        startTimer(timeOverride);
+      }
+    }
+
+    function startTimer(seconds) {
+      timeLeft = seconds;
+      document.getElementById('timer').textContent = `Time left: ${timeLeft}s`;
+      if (role === 'proctor') {
+        timerInterval = setInterval(() => {
+          timeLeft--;
+          channel.postMessage({ type: 'tick', timeLeft });
+          updateTimer(timeLeft);
+          if (timeLeft <= 0) {
+            clearInterval(timerInterval);
+            nextQuestion();
+          }
+        }, 1000);
+      }
+    }
+
+    function updateTimer(t) {
+      document.getElementById('timer').textContent = `Time left: ${t}s`;
+    }
+
+    function nextQuestion() {
+      currentIndex++;
+      if (currentIndex >= questions.length) {
+        document.body.innerHTML = '<h1>Session complete!</h1>';
+        return;
+      }
+      channel.postMessage({ type: 'show', index: currentIndex, time: questions[currentIndex].time });
+      showQuestion(questions[currentIndex].time);
+    }
+
+    function previousQuestion() {
+      if (currentIndex > 0) {
+        currentIndex--;
+        channel.postMessage({ type: 'show', index: currentIndex, time: questions[currentIndex].time });
+        showQuestion(questions[currentIndex].time);
+      }
+    }
+
+    function shuffleArray(array) {
+      return array.sort(() => Math.random() - 0.5);
+    }
+
+    if (role === 'proctor') {
+      roleTitle.textContent = 'Proctor View';
+      document.addEventListener('keydown', (e) => {
+        if (!started && e.code === 'Enter') {
+          channel.postMessage({ type: 'start', questions: questions });
+          started = true;
+          nextQuestion();
+        } else if (started) {
+          if (e.code === 'Space') {
+            e.preventDefault();
+            clearInterval(timerInterval);
+            nextQuestion();
+          } else if (e.code === 'ArrowRight') {
+            e.preventDefault();
+            clearInterval(timerInterval);
+            nextQuestion();
+          } else if (e.code === 'ArrowLeft') {
+            e.preventDefault();
+            clearInterval(timerInterval);
+            previousQuestion();
+          }
+        }
+      });
+    } else {
+      roleTitle.textContent = 'Student View';
+    }
+
+    loadQuestions();
+  </script>
+</body>
+</html>
